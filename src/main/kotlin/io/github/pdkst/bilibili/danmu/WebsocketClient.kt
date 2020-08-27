@@ -3,10 +3,13 @@ package io.github.pdkst.bilibili.danmu
 import com.google.gson.GsonBuilder
 import org.java_websocket.client.WebSocketClient
 import org.java_websocket.handshake.ServerHandshake
-import java.lang.Exception
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.net.URI
 import java.nio.ByteBuffer
 import java.util.*
+import java.util.zip.GZIPInputStream
+import java.util.zip.InflaterInputStream
 import kotlin.concurrent.timerTask
 
 class WebsocketClient(
@@ -28,7 +31,7 @@ class WebsocketClient(
 
     override fun onError(ex: Exception?) {
         println("websocket onError ")
-        println(ex)
+        ex?.printStackTrace()
     }
 
     override fun onMessage(message: String?) {
@@ -37,7 +40,13 @@ class WebsocketClient(
 
     override fun onMessage(bytes: ByteBuffer?) {
         println("message buffer = $bytes")
-        val danmuPack = bytes?.let {
+        bytes?.let {
+            var limit = bytes.limit()
+            ByteArray(limit).let {
+                bytes.get(it, 0, limit)
+                ByteBuffer.wrap(it)
+            }
+        }?.let {
             DanmuPack(it)
         }?.let {
             messageHandler(it)
@@ -45,6 +54,7 @@ class WebsocketClient(
     }
 
     private fun messageHandler(pack: DanmuPack) {
+        println("handler = ${pack.operatoion}")
         when (pack.operatoion) {
             Operation.AUTH_REPLY -> {
                 timer = timer ?: Timer()
@@ -58,23 +68,51 @@ class WebsocketClient(
                     )
                 }
             }
+
+            Operation.HEARTBEAT_REPLY -> {
+                //int 为在线人数
+                println("online = " + pack.dataBuffer.getInt(DanmuPack.packetOffset))
+            }
+
+            Operation.SEND_MSG_REPLY -> {
+                for (danmuPack in pack.iterator()) {
+                    if (danmuPack.version == WebsocketBodyProtocol.VERSION_DEFLATE) {
+                        //解压
+                        println("deflate pack ...")
+                        try {
+                            ByteArrayInputStream(danmuPack.value.array())
+                                .let { InflaterInputStream(it) }
+                                .use { input ->
+                                    ByteArrayOutputStream().let {
+                                        input.copyTo(it)
+                                        it.toByteArray()
+                                        DanmuPack(it.toByteArray())
+                                    }.let {
+                                        println("deflate pack ... ${it.bodyAsJson()}")
+                                        messageHandler(it)
+                                    }
+                                }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    } else {
+                        println("msg = ${danmuPack.bodyAsJson()}")
+                    }
+                }
+            }
         }
     }
 
     fun sendAuthPack() {
         val gson = GsonBuilder().disableHtmlEscaping().create()
         val map = mapOf<String, Any>(
-            "uid" to 2440314,
+            "uid" to uid,
             "roomid" to roomId,
             "token" to token
         )
         val json = gson.toJson(map)
-        println("auth = $json")
+        println("send auth = $json")
         val pack = DanmuPack.packString(json, Operation.AUTH)
-        println("pack lenth = ${pack.packetLength}")
-        println("pack lenth = ${pack.headerLength}")
-        println("pack operatoion = ${pack.operatoion}")
-        println("pack rawLength = ${pack.dataBuffer.limit()}")
         send(pack.dataBuffer)
     }
 

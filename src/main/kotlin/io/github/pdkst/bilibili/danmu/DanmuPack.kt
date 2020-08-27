@@ -1,8 +1,13 @@
 package io.github.pdkst.bilibili.danmu
 
 import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 
-class DanmuPack(val dataBuffer: ByteBuffer, offset: Int = 0) {
+class DanmuPack(
+    val dataBuffer: ByteBuffer,
+    private val offset: Int = 0
+) : Iterable<DanmuPack> {
+    constructor(byteArray: ByteArray) : this(ByteBuffer.wrap(byteArray))
 
     val packetLength: Int
     val headerLength: Short
@@ -50,11 +55,36 @@ class DanmuPack(val dataBuffer: ByteBuffer, offset: Int = 0) {
         this.version = dataBuffer.getShort(offset + versionOffset)
         this.operatoion = dataBuffer.getInt(offset + operationOffset)
         this.sequence = dataBuffer.getInt(offset + seqOffset)
-        val byteArray = ByteArray(packetLength)
-        dataBuffer.get(byteArray, offset, offset + packetLength)
+
+        val byteArray = ByteArray(packetLength - headerLength)
+        val duplicate = dataBuffer.duplicate()
+        duplicate.position(offset + headerLength)
+        duplicate.get(byteArray)
         this.value = ByteBuffer.wrap(byteArray)
-        dataBuffer.position(0)
     }
 
+    fun bodyAsJson(): String {
+        return String(value.array())
+    }
+
+    fun hasNext(): Boolean {
+        return this.offset + this.packetLength < dataBuffer.limit()
+    }
+
+    fun next(): DanmuPack {
+        dataBuffer.slice()
+        return DanmuPack(dataBuffer, this.offset + this.packetLength)
+    }
+
+    override fun iterator(): Iterator<DanmuPack> {
+        return iterator {
+            var danmuPack = this@DanmuPack
+            yield(danmuPack)
+            while (danmuPack.hasNext()) {
+                danmuPack = danmuPack.next()
+                yield(danmuPack)
+            }
+        }
+    }
 
 }
