@@ -8,7 +8,6 @@ import java.io.ByteArrayOutputStream
 import java.net.URI
 import java.nio.ByteBuffer
 import java.util.*
-import java.util.zip.GZIPInputStream
 import java.util.zip.InflaterInputStream
 import kotlin.concurrent.timerTask
 
@@ -108,7 +107,11 @@ class WebsocketClient(
         val map = mapOf<String, Any>(
             "uid" to uid,
             "roomid" to roomId,
-            "token" to token
+            "protover" to 2,
+            "platform" to "web",
+            "clientver" to "1.14.3",
+            "type" to 2,
+            "key" to token
         )
         val json = gson.toJson(map)
         println("send auth = $json")

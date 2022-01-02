@@ -1,12 +1,13 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    kotlin("jvm") version "1.4.0"
+    kotlin("jvm") version "1.6.10"
 }
 group = "io.github.pdkst"
 version = "1.0-SNAPSHOT"
 
 repositories {
+    maven("https://maven.aliyun.com/repository/central")
     mavenCentral()
 }
 dependencies {
